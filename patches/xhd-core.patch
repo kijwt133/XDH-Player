@@ -1,0 +1,764 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index cb50896..9714612 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -40,6 +40,7 @@ option(ENABLE_DISCORD_RPC "Enable the Discord RPC integration" ON)
+ option(ENABLE_UPDATER "Enables the options to updater" ON)
+ option(ENABLE_TESTS "Build unit tests (requires GTest)" OFF)
+ option(ENABLE_SYSTEM_LIBRARIES "Enable building against system libraries" OFF)
++option(XHD_ONLY_RUNTIME "Restrict this build to the pinned original X HD title" OFF)
+ 
+ # First, determine whether to use CMAKE_OSX_ARCHITECTURES or CMAKE_SYSTEM_PROCESSOR.
+ if (APPLE AND CMAKE_OSX_ARCHITECTURES)
+@@ -62,7 +63,11 @@ endif()
+ if (ARCHITECTURE STREQUAL "x86_64")
+     # Target x86-64-v3 CPU architecture as this is a good balance between supporting performance critical
+     # instructions like AVX2 and maintaining support for older CPUs.
+-    add_compile_options(-march=x86-64-v3)
++    if (CMAKE_CXX_COMPILER MATCHES "zig(\\.exe)?$")
++        add_compile_options(-mcpu=x86_64_v3)
++    else()
++        add_compile_options(-march=x86-64-v3)
++    endif()
+ endif()
+ 
+ cmake_host_system_information(RESULT PROC_INFO QUERY PROCESSOR_DESCRIPTION)
+@@ -1293,6 +1298,12 @@ target_link_libraries(shadps4 PRIVATE magic_enum::magic_enum fmt::fmt toml11::to
+ target_link_libraries(shadps4 PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
+ target_link_libraries(shadps4 PRIVATE stb::headers lfreist-hwinfo::hwinfo nlohmann_json::nlohmann_json miniz::miniz fdk-aac CLI11::CLI11 OpenAL::OpenAL Cpp_Httplib miniupnpc::miniupnpc)
+ target_link_libraries(shadps4 PRIVATE Freetype::Freetype)
++if (XHD_ONLY_RUNTIME AND CMAKE_CXX_COMPILER MATCHES "zig(\\.exe)?$")
++    # Portable Zig has no GNU windres. A static library needs no Windows version resource.
++    set_source_files_properties(
++        "${PROJECT_SOURCE_DIR}/externals/freetype/src/base/ftver.rc"
++        TARGET_DIRECTORY freetype PROPERTIES HEADER_FILE_ONLY TRUE)
++endif()
+ target_link_libraries(shadps4 PRIVATE libprotobuf)
+ target_link_libraries(shadps4 PRIVATE ZArchive::zarchive)
+ target_include_directories(shadps4 PRIVATE "${SHADNET_PROTO_OUT}")
+@@ -1305,6 +1316,10 @@ else()
+ endif()
+ 
+ target_compile_definitions(shadps4 PRIVATE IMGUI_USER_CONFIG="imgui/imgui_config.h")
++if (XHD_ONLY_RUNTIME)
++    target_compile_definitions(shadps4 PRIVATE XHD_ONLY_RUNTIME)
++    set_target_properties(shadps4 PROPERTIES OUTPUT_NAME "XHD-Runtime")
++endif()
+ target_compile_definitions(Dear_ImGui PRIVATE IMGUI_USER_CONFIG="${PROJECT_SOURCE_DIR}/src/imgui/imgui_config.h")
+ 
+ if (ENABLE_DISCORD_RPC)
+@@ -1358,7 +1373,12 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+ endif()
+ 
+ if (WIN32)
+-    target_link_libraries(shadps4 PRIVATE mincore wepoll wbemuuid)
++    if (XHD_ONLY_RUNTIME AND CMAKE_CXX_COMPILER MATCHES "zig(\\.exe)?$")
++        target_link_libraries(shadps4 PRIVATE kernel32 wepoll wbemuuid rpcrt4 crypt32)
++        target_sources(shadps4 PRIVATE src/common/xhd_windows_imports.cpp)
++    else()
++        target_link_libraries(shadps4 PRIVATE mincore wepoll wbemuuid)
++    endif()
+ 
+     if (MSVC)
+         # MSVC likes putting opinions on what people can use, disable:
+@@ -1382,6 +1402,8 @@ if (WIN32)
+     # Disable ASLR so we can reserve the user area
+     if (MSVC)
+         target_link_options(shadps4 PRIVATE /DYNAMICBASE:NO)
++    elseif (XHD_ONLY_RUNTIME AND CMAKE_CXX_COMPILER MATCHES "zig(\\.exe)?$")
++        target_link_options(shadps4 PRIVATE -fno-pie)
+     else()
+         target_link_options(shadps4 PRIVATE -Wl,--disable-dynamicbase)
+     endif()
+@@ -1402,7 +1424,9 @@ if (WIN32)
+ endif()
+ 
+ if (WIN32)
+-    target_sources(shadps4 PRIVATE src/dist/shadps4.rc)
++    if (NOT (XHD_ONLY_RUNTIME AND CMAKE_CXX_COMPILER MATCHES "zig(\\.exe)?$"))
++        target_sources(shadps4 PRIVATE src/dist/shadps4.rc)
++    endif()
+ endif()
+ 
+ if (NOT MSVC)
+diff --git a/externals/aacdec/CMakeLists.txt b/externals/aacdec/CMakeLists.txt
+index 2adfa03..0e7482b 100644
+--- a/externals/aacdec/CMakeLists.txt
++++ b/externals/aacdec/CMakeLists.txt
+@@ -140,6 +140,10 @@ add_library(fdk-aac
+   ${SACDEC_SRC}
+ )
+ 
++if(XHD_ONLY_RUNTIME)
++  target_compile_definitions(fdk-aac PRIVATE SUPPRESS_BUILD_DATE_INFO)
++endif()
++
+ target_include_directories(fdk-aac
+   PUBLIC
+     fdk-aac/libAACdec/include
+diff --git a/src/core/address_space.cpp b/src/core/address_space.cpp
+index 4318a0c..b44c6b4 100644
+--- a/src/core/address_space.cpp
++++ b/src/core/address_space.cpp
+@@ -196,7 +196,13 @@ struct AddressSpace::Impl {
+ 
+         // Allocate backing file that represents the total physical memory.
+         backing_handle = CreateFileMapping2(INVALID_HANDLE_VALUE, nullptr, FILE_MAP_ALL_ACCESS,
+-                                            PAGE_EXECUTE_READWRITE, SEC_COMMIT, BackingSize,
++                                            PAGE_EXECUTE_READWRITE,
++#if defined(XHD_ONLY_RUNTIME)
++                                            SEC_RESERVE,
++#else
++                                            SEC_COMMIT,
++#endif
++                                            BackingSize,
+                                             nullptr, nullptr, 0);
+ 
+         ASSERT_MSG(backing_handle, "{}", Common::GetLastErrorMsg());
+@@ -211,6 +217,10 @@ struct AddressSpace::Impl {
+             MapViewOfFile3(backing_handle, process, backing_base, 0, BackingSize,
+                            MEM_REPLACE_PLACEHOLDER, PAGE_EXECUTE_READWRITE, nullptr, 0);
+         ASSERT_MSG(ret == backing_base, "{}", Common::GetLastErrorMsg());
++#if defined(XHD_ONLY_RUNTIME)
++        LOG_INFO(Core, "XHD memory backing: {} MiB reserved; commit on physical mapping",
++                 BackingSize / 1_MB);
++#endif
+     }
+ 
+     ~Impl() {
+@@ -241,6 +251,19 @@ struct AddressSpace::Impl {
+ 
+         void* ptr = nullptr;
+         if (phys_addr != -1) {
++#if defined(XHD_ONLY_RUNTIME)
++            if (fd == -1) {
++                // Commit through the permanent backing view before exposing any guest alias.
++                // SEC_RESERVE retains the original physical offsets and shared-page semantics.
++                // Already committed pages keep their contents on repeated MEM_COMMIT calls.
++                ASSERT_MSG(phys_addr <= BackingSize && size <= BackingSize - phys_addr,
++                           "Physical mapping exceeds backing: {:#x} + {:#x}", phys_addr, size);
++                void* committed = VirtualAlloc(backing_base + phys_addr, size, MEM_COMMIT,
++                                               PAGE_EXECUTE_READWRITE);
++                ASSERT_MSG(committed, "XHD physical commit failed ({} MiB): {}", size / 1_MB,
++                           Common::GetLastErrorMsg());
++            }
++#endif
+             HANDLE backing = fd != -1 ? reinterpret_cast<HANDLE>(fd) : backing_handle;
+             if (fd != -1 && prot == PAGE_READONLY) {
+                 // Allocate the memory for the mapping
+diff --git a/src/core/cpu_patches.cpp b/src/core/cpu_patches.cpp
+index 7a360c6..b626d37 100644
+--- a/src/core/cpu_patches.cpp
++++ b/src/core/cpu_patches.cpp
+@@ -6,6 +6,7 @@
+ #include <bitset>
+ #include <climits>
+ #include <cstring>
++#include <cstdlib>
+ #include <map>
+ #include <memory>
+ #include <mutex>
+@@ -2193,6 +2194,16 @@ void RegisterPatchModule(void* module_ptr, u64 module_size, void* trampoline_are
+ }
+ 
+ void PrePatchInstructions(u64 segment_addr, u64 segment_size) {
++#if defined(_WIN32) && defined(XHD_ONLY_RUNTIME)
++    // Optional diagnostic: use upstream's AOT path to avoid first-use CPU traps.
++    // No guest files are rewritten. Keep disabled until parity is established.
++    const char* eager = std::getenv("XHD_EAGER_CPU_PATCHES");
++    if (eager != nullptr && std::strcmp(eager, "1") == 0 && !Patches.empty()) {
++        TryPatchAot(reinterpret_cast<void*>(segment_addr), segment_size);
++        LOG_INFO(Core, "X HD eager CPU patch experiment: segment {:#x}, size {:#x}",
++                 segment_addr, segment_size);
++    }
++#endif
+ #if !defined(_WIN32) && !defined(__APPLE__)
+     // Linux and others have an FS segment pointing to valid memory, so continue to do full
+     // ahead-of-time patching for now until a better solution is worked out.
+diff --git a/src/core/libraries/kernel/threads/mutex.cpp b/src/core/libraries/kernel/threads/mutex.cpp
+index 2af3484..53338ea 100644
+--- a/src/core/libraries/kernel/threads/mutex.cpp
++++ b/src/core/libraries/kernel/threads/mutex.cpp
+@@ -12,6 +12,12 @@
+ #include "core/libraries/kernel/threads/pthread.h"
+ #include "core/libraries/libs.h"
+ 
++#if defined(XHD_ONLY_RUNTIME) && defined(_WIN32) && defined(__x86_64__)
++#include <cstdlib>
++#include <windows.h>
++extern "C" void* PS4_SYSV_ABI _runOnAnotherStack(void*, void*, void*) asm("_runOnAnotherStack");
++#endif
++
+ namespace Libraries::Kernel {
+ 
+ static constexpr u32 MUTEX_ADAPTIVE_SPINS = 2000;
+@@ -464,6 +470,45 @@ s32 PS4_SYSV_ABI posix_pthread_mutexattr_destroy(PthreadMutexAttrT* attr) {
+     return 0;
+ }
+ 
++#if defined(XHD_ONLY_RUNTIME) && defined(_WIN32) && defined(__x86_64__)
++// Diagnostic only: execute the same mutex implementation on a dedicated host stack.
++// Do not clone draw objects, skip invalid nodes, or change guest synchronization.
++struct XhdMutexStack {
++    void* memory = VirtualAlloc(nullptr, 2 * 1024 * 1024, MEM_RESERVE | MEM_COMMIT,
++                               PAGE_READWRITE);
++    bool active = false;
++    ~XhdMutexStack() { if (memory) VirtualFree(memory, 0, MEM_RELEASE); }
++};
++struct XhdMutexCall {
++    PthreadMutexT* mutex;
++    s32 (PS4_SYSV_ABI *function)(PthreadMutexT*);
++    s32 result;
++};
++static void* PS4_SYSV_ABI XhdMutexEntry(void* raw) {
++    auto* call = static_cast<XhdMutexCall*>(raw);
++    call->result = call->function(call->mutex);
++    return nullptr;
++}
++static s32 PS4_SYSV_ABI XhdMutexInvoke(PthreadMutexT* mutex,
++                                     s32 (PS4_SYSV_ABI *function)(PthreadMutexT*)) {
++    thread_local XhdMutexStack stack;
++    if (stack.active) return function(mutex);
++    if (!stack.memory) std::abort();
++    XhdMutexCall call{mutex, function, 0};
++    stack.active = true;
++    _runOnAnotherStack(&call, reinterpret_cast<void*>(XhdMutexEntry),
++                      static_cast<char*>(stack.memory) + 2 * 1024 * 1024 - 64);
++    stack.active = false;
++    return call.result;
++}
++static s32 PS4_SYSV_ABI XhdMutexLock(PthreadMutexT* mutex) {
++    return XhdMutexInvoke(mutex, posix_pthread_mutex_lock);
++}
++static s32 PS4_SYSV_ABI XhdMutexUnlock(PthreadMutexT* mutex) {
++    return XhdMutexInvoke(mutex, posix_pthread_mutex_unlock);
++}
++#endif
++
+ void RegisterMutex(Core::Loader::SymbolsResolver* sym) {
+     // Posix
+     LIB_FUNCTION("ttHNfU+qDBU", "libScePosix", 1, "libkernel", posix_pthread_mutex_init);
+@@ -525,11 +570,23 @@ void RegisterMutex(Core::Loader::SymbolsResolver* sym) {
+     LIB_FUNCTION("cmo1RIYva9o", "libkernel", 1, "libkernel", ORBIS(scePthreadMutexInit));
+     LIB_FUNCTION("qH1gXoq71RY", "libkernel", 1, "libkernel", ORBIS(posix_pthread_mutex_init));
+     LIB_FUNCTION("W6OrTBO95UY", "libkernel", 1, "libkernel", ORBIS(posix_pthread_mutex_isowned_np));
++#if defined(XHD_ONLY_RUNTIME) && defined(_WIN32) && defined(__x86_64__)
++    const char* xhd_host_stack = std::getenv("XHD_HOST_STACK_MUTEX");
++    const bool xhd_host_stack_enabled = xhd_host_stack && std::strcmp(xhd_host_stack, "1") == 0;
++    if (xhd_host_stack_enabled) {
++        LIB_FUNCTION("9UK1vLZQft4", "libkernel", 1, "libkernel", ORBIS(XhdMutexLock));
++        LIB_FUNCTION("tn3VlD0hG60", "libkernel", 1, "libkernel", ORBIS(XhdMutexUnlock));
++    } else {
++        LIB_FUNCTION("9UK1vLZQft4", "libkernel", 1, "libkernel", ORBIS(posix_pthread_mutex_lock));
++        LIB_FUNCTION("tn3VlD0hG60", "libkernel", 1, "libkernel", ORBIS(posix_pthread_mutex_unlock));
++    }
++#else
+     LIB_FUNCTION("9UK1vLZQft4", "libkernel", 1, "libkernel", ORBIS(posix_pthread_mutex_lock));
++    LIB_FUNCTION("tn3VlD0hG60", "libkernel", 1, "libkernel", ORBIS(posix_pthread_mutex_unlock));
++#endif
+     LIB_FUNCTION("IafI2PxcPnQ", "libkernel", 1, "libkernel",
+                  ORBIS(posix_pthread_mutex_reltimedlock_np));
+     LIB_FUNCTION("upoVrzMHFeE", "libkernel", 1, "libkernel", ORBIS(posix_pthread_mutex_trylock));
+-    LIB_FUNCTION("tn3VlD0hG60", "libkernel", 1, "libkernel", ORBIS(posix_pthread_mutex_unlock));
+     LIB_FUNCTION("pOmNmyRKlIE", "libkernel", 1, "libkernel",
+                  ORBIS(posix_pthread_mutex_getspinloops_np));
+     LIB_FUNCTION("AWS3NyViL9o", "libkernel", 1, "libkernel",
+diff --git a/src/core/libraries/videoout/video_out.cpp b/src/core/libraries/videoout/video_out.cpp
+index 1cf6d2a..0f4da57 100644
+--- a/src/core/libraries/videoout/video_out.cpp
++++ b/src/core/libraries/videoout/video_out.cpp
+@@ -12,6 +12,9 @@
+ #include "core/libraries/videoout/videoout_error.h"
+ #include "core/platform.h"
+ #include "video_core/renderer_vulkan/vk_presenter.h"
++#if defined(XHD_ONLY_RUNTIME)
++#include <cstdlib>
++#endif
+ 
+ extern std::unique_ptr<Vulkan::Presenter> presenter;
+ 
+@@ -140,6 +143,12 @@ s32 PS4_SYSV_ABI sceVideoOutRegisterBuffers(s32 handle, s32 startIndex, void* co
+ 
+ s32 PS4_SYSV_ABI sceVideoOutSetFlipRate(s32 handle, s32 rate) {
+     LOG_TRACE(Lib_VideoOut, "called");
++#if defined(XHD_ONLY_RUNTIME)
++    const char* color_trace = std::getenv("XHD_COLOR_DIAGNOSTICS");
++    if (color_trace && color_trace[0] == '1') {
++        LOG_INFO(Lib_VideoOut, "XHD_COLOR FlipRate handle={} rate={}", handle, rate);
++    }
++#endif
+     driver->GetPort(handle)->flip_rate = rate;
+     return ORBIS_OK;
+ }
+@@ -388,6 +397,11 @@ s32 PS4_SYSV_ABI sceVideoOutColorSettingsSetGamma(SceVideoOutColorSettings* sett
+         return ORBIS_VIDEO_OUT_ERROR_INVALID_VALUE;
+     }
+     settings->gamma = gamma;
++#if defined(XHD_ONLY_RUNTIME)
++    if (const char* trace = std::getenv("XHD_COLOR_DIAGNOSTICS"); trace && std::strcmp(trace, "1") == 0) {
++        LOG_INFO(Lib_VideoOut, "XHD_COLOR GammaRequest gamma={}", gamma);
++    }
++#endif
+     return ORBIS_OK;
+ }
+ 
+@@ -402,6 +416,11 @@ s32 PS4_SYSV_ABI sceVideoOutAdjustColor(s32 handle, const SceVideoOutColorSettin
+     }
+ 
+     presenter->GetPPSettingsRef().gamma = settings->gamma;
++#if defined(XHD_ONLY_RUNTIME)
++    if (const char* trace = std::getenv("XHD_COLOR_DIAGNOSTICS"); trace && std::strcmp(trace, "1") == 0) {
++        LOG_INFO(Lib_VideoOut, "XHD_COLOR GammaApplied handle={} gamma={}", handle, settings->gamma);
++    }
++#endif
+     return ORBIS_OK;
+ }
+ 
+diff --git a/src/emulator.cpp b/src/emulator.cpp
+index c4f4168..b9c8039 100644
+--- a/src/emulator.cpp
++++ b/src/emulator.cpp
+@@ -8,6 +8,7 @@
+ #include <iostream>
+ #include <set>
+ #include <sstream>
++#include <stdexcept>
+ #include <fmt/core.h>
+ #include <fmt/xchar.h>
+ #include <hwinfo/hwinfo.h>
+@@ -433,6 +434,18 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
+     }
+ 
+     EmulatorSettings.Load(id);
++#ifdef XHD_ONLY_RUNTIME
++    // X HD specialization: refuse unrelated titles and retain factory timing.
++    if (!param_sfo_exists || id != "CUSA02908" || app_version != "01.00") {
++        throw std::runtime_error("X HD runtime requires CUSA02908 APP_VER 01.00");
++    }
++    mnt->ignore_game_patches = true;
++    EmulatorSettings.SetVblankFrequency(60);
++    EmulatorSettings.SetFsrEnabled(false);
++    EmulatorSettings.SetRcasEnabled(false);
++    EmulatorSettings.SetPipelineCacheEnabled(true);
++    EmulatorSettings.SetPipelineCacheArchived(false);
++#endif
+     // Switch to configured log
+     Common::Log::Switch((!id.empty() && EmulatorSettings.IsLogSeparate()) ? id + ".log"
+                                                                           : "shad_log.txt",
+diff --git a/src/main.cpp b/src/main.cpp
+index 552cb73..b78b65b 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -254,7 +254,16 @@ int main(int argc, char* argv[]) {
+     auto* emulator = Common::Singleton<Core::Emulator>::Instance();
+     emulator->executableName = argv[0];
+     emulator->waitForDebuggerBeforeRun = waitForDebugger;
++#ifdef XHD_ONLY_RUNTIME
++    try {
++        emulator->Run(ebootPath, gameArgs, overrideRoot, mounts, env_vars, append_log);
++    } catch (const std::exception& error) {
++        std::cerr << "X HD runtime: " << error.what() << std::endl;
++        return 1;
++    }
++#else
+     emulator->Run(ebootPath, gameArgs, overrideRoot, mounts, env_vars, append_log);
++#endif
+ 
+     return 0;
+ }
+diff --git a/src/video_core/cache_storage.cpp b/src/video_core/cache_storage.cpp
+index a403e85..0d48f74 100644
+--- a/src/video_core/cache_storage.cpp
++++ b/src/video_core/cache_storage.cpp
+@@ -87,19 +87,25 @@ constexpr std::string GetBlobFileExtension(BlobType type) {
+     }
+ }
+ 
+-void DataBase::Open() {
++void DataBase::Open(std::string_view cache_namespace) {
+     if (opened) {
+         return;
+     }
+ 
+     const auto& game_info = Common::ElfInfo::Instance();
++    // X HD: separate incompatible shader profiles without deleting the old cache.
++    std::string cache_name{game_info.GameSerial()};
++    if (!cache_namespace.empty()) {
++        cache_name += ".";
++        cache_name += cache_namespace;
++    }
+ 
+     using namespace Common::FS;
+     if (EmulatorSettings.IsPipelineCacheArchived()) {
+         mz_zip_zero_struct(&zip_ar);
+ 
+         cache_path = GetUserPath(PathType::CacheDir) /
+-                     std::filesystem::path{game_info.GameSerial()}.replace_extension(".zip");
++                     std::filesystem::path{cache_name + ".zip"};
+ 
+         if (!mz_zip_reader_init_file(&zip_ar, cache_path.string().c_str(),
+                                      MZ_ZIP_FLAG_READ_ALLOW_WRITING) ||
+@@ -110,7 +116,7 @@ void DataBase::Open() {
+             mz_zip_writer_init_file(&zip_ar, cache_path.string().c_str(), 0);
+         }
+     } else {
+-        cache_path = GetUserPath(PathType::CacheDir) / game_info.GameSerial();
++        cache_path = GetUserPath(PathType::CacheDir) / cache_name;
+         if (!std::filesystem::exists(cache_path)) {
+             std::filesystem::create_directories(cache_path);
+         }
+diff --git a/src/video_core/cache_storage.h b/src/video_core/cache_storage.h
+index 91f2136..42d8502 100644
+--- a/src/video_core/cache_storage.h
++++ b/src/video_core/cache_storage.h
+@@ -8,6 +8,7 @@
+ #include "common/types.h"
+ 
+ #include <functional>
++#include <string_view>
+ #include <thread>
+ #include <vector>
+ 
+@@ -26,7 +27,7 @@ public:
+         return *Common::Singleton<DataBase>::Instance();
+     }
+ 
+-    void Open();
++    void Open(std::string_view cache_namespace = {});
+     void Close();
+     [[nodiscard]] bool IsOpened() const {
+         return opened;
+diff --git a/src/video_core/renderer_vulkan/vk_pipeline_serialization.cpp b/src/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
+index 8e25ba3..2260492 100644
+--- a/src/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
++++ b/src/video_core/renderer_vulkan/vk_pipeline_serialization.cpp
+@@ -9,6 +9,9 @@
+ #include "video_core/renderer_vulkan/vk_instance.h"
+ #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
+ #include "video_core/renderer_vulkan/vk_shader_util.h"
++#ifdef XHD_ONLY_RUNTIME
++#include "video_core/renderer_vulkan/xhd_cache_profile.h"
++#endif
+ 
+ namespace Serialization {
+ /* You should increment versions below once corresponding serialization scheme is changed. */
+@@ -306,7 +309,18 @@ void PipelineCache::WarmUp() {
+         return;
+     }
+ 
++#ifdef XHD_ONLY_RUNTIME
++    // Inspired by bbport's incompatible-cache recovery. Keep old caches intact,
++    // and allow each shader profile/schema to learn pipelines across sessions.
++    const auto cache_namespace =
++        "xhd-c7e065d1-" + std::to_string(Serialization::ShaderBinaryVersion) + "-" +
++        std::to_string(Serialization::ShaderMetaVersion) + "-" +
++        std::to_string(Serialization::PipelineKeyVersion) + "-" +
++        std::to_string(Xhd::StableProfileHash(profile));
++    Storage::DataBase::Instance().Open(cache_namespace);
++#else
+     Storage::DataBase::Instance().Open();
++#endif
+ 
+     // Check if cache is compatible
+     std::vector<u8> profile_data{};
+diff --git a/src/video_core/renderer_vulkan/vk_presenter.cpp b/src/video_core/renderer_vulkan/vk_presenter.cpp
+index 520e5e0..917f241 100644
+--- a/src/video_core/renderer_vulkan/vk_presenter.cpp
++++ b/src/video_core/renderer_vulkan/vk_presenter.cpp
+@@ -42,6 +42,10 @@
+ #include <sstream>
+ #include <system_error>
+ #include <vector>
++#if defined(XHD_ONLY_RUNTIME)
++#include <cstdlib>
++#include <tuple>
++#endif
+ #include <imgui.h>
+ #include <stb_image_write.h>
+ #include <vk_mem_alloc.h>
+@@ -699,6 +703,29 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup&
+ 
+     VideoCore::ImageViewInfo view_info{};
+     view_info.format = GetFrameViewFormat(attribute.attrib.pixel_format);
++#if defined(XHD_ONLY_RUNTIME)
++    static const bool xhd_color_trace = [] {
++        const char* flag = std::getenv("XHD_COLOR_DIAGNOSTICS");
++        return flag && std::strcmp(flag, "1") == 0;
++    }();
++    if (xhd_color_trace) {
++        const auto surface = swapchain.GetSurfaceFormat();
++        auto signature = std::tuple{u32(attribute.attrib.pixel_format), u32(view_info.format),
++                                         u32(surface.format), u32(surface.colorSpace),
++                                         pp_settings.gamma, u32(frame->is_hdr)};
++        static thread_local decltype(signature) previous{};
++        static thread_local u32 observations = 0;
++        if (observations < 64 && (observations == 0 || previous != signature)) {
++            LOG_INFO(Render_Vulkan,
++                     "XHD_COLOR Present pixel={} view={} surface={} space={} gamma={} hdr={}",
++                     u32(attribute.attrib.pixel_format), vk::to_string(view_info.format),
++                     vk::to_string(surface.format), vk::to_string(surface.colorSpace),
++                     pp_settings.gamma, u32(frame->is_hdr));
++            previous = signature;
++            ++observations;
++        }
++    }
++#endif
+     // Exclude alpha from output frame to avoid blending with UI.
+     view_info.mapping.a = vk::ComponentSwizzle::eOne;
+ 
+diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+index 26faa77..501dbc9 100644
+--- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
++++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
+@@ -18,6 +18,12 @@
+ #include "video_core/renderer_vulkan/vk_shader_hle.h"
+ #include "video_core/texture_cache/image_view.h"
+ #include "video_core/texture_cache/texture_cache.h"
++#if defined(XHD_ONLY_RUNTIME)
++#include <cstdlib>
++#include <cstring>
++#include <set>
++#include <tuple>
++#endif
+ 
+ namespace Vulkan {
+ 
+@@ -56,6 +62,29 @@ Rasterizer::~Rasterizer() = default;
+ 
+ bool Rasterizer::FilterDraw() {
+     const auto& regs = liverpool->regs;
++#if defined(XHD_ONLY_RUNTIME)
++    static const bool xhd_color_trace = [] {
++        const char* flag = std::getenv("XHD_COLOR_DIAGNOSTICS");
++        return flag && std::strcmp(flag, "1") == 0;
++    }();
++    if (xhd_color_trace) {
++        static thread_local std::set<std::tuple<u32, u32, u32, u32, u32, u32>> seen;
++        for (u32 index = 0; index < AmdGpu::NUM_COLOR_BUFFERS; ++index) {
++            const auto& cb = regs.color_buffers[index];
++            if (!cb || !regs.color_target_mask.GetMask(index)) continue;
++            const auto signature = std::tuple{index, u32(cb.GetDataFmt()), u32(cb.GetNumberFmt()),
++                                             cb.NumSlices(), u32(regs.color_control.degamma_enable),
++                                             u32(regs.vs_output_control.use_vtx_render_target_idx)};
++            if (seen.size() < 64 && seen.insert(signature).second) {
++                LOG_INFO(Render_Vulkan,
++                         "XHD_COLOR Target slot={} data={} number={} layers={} degamma={} layer_export={} address={:#x}",
++                         index, u32(cb.GetDataFmt()), u32(cb.GetNumberFmt()), cb.NumSlices(),
++                         u32(regs.color_control.degamma_enable),
++                         u32(regs.vs_output_control.use_vtx_render_target_idx), cb.Address());
++            }
++        }
++    }
++#endif
+     if (regs.color_control.mode == AmdGpu::ColorControl::OperationMode::EliminateFastClear) {
+         // Clears the render target if FCE is launched before any draws
+         EliminateFastClear();
+diff --git a/src/video_core/texture_cache/texture_cache.cpp b/src/video_core/texture_cache/texture_cache.cpp
+index 2d18c10..fe52711 100644
+--- a/src/video_core/texture_cache/texture_cache.cpp
++++ b/src/video_core/texture_cache/texture_cache.cpp
+@@ -2,6 +2,12 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include <xxhash.h>
++#if defined(XHD_ONLY_RUNTIME)
++#include <chrono>
++#include <cstdlib>
++#include <cstring>
++#include <set>
++#endif
+ 
+ #include "common/assert.h"
+ #include "common/debug.h"
+@@ -22,6 +28,39 @@
+ 
+ namespace VideoCore {
+ 
++#if defined(XHD_ONLY_RUNTIME)
++static bool XhdExposureReadbacks() {
++    static const bool enabled = [] {
++        const char* flag = std::getenv("XHD_EXPOSURE_READBACKS");
++        return flag && std::strcmp(flag, "1") == 0;
++    }();
++    return enabled;
++}
++
++static bool XhdReadbackAllowed(const Image& image) {
++    return !XhdExposureReadbacks() ||
++           (image.info.size.width <= 8 && image.info.size.height <= 8 &&
++            !image.info.props.is_depth);
++}
++#endif
++
++static vk::BufferImageCopy ImageDownloadCopy(const Image& image, u64 offset) {
++    return {
++        .bufferOffset = offset,
++        .bufferRowLength = image.info.pitch,
++        .bufferImageHeight = image.info.size.height,
++        .imageSubresource = {
++            .aspectMask = image.info.props.is_depth ? vk::ImageAspectFlagBits::eDepth
++                                                    : vk::ImageAspectFlagBits::eColor,
++            .mipLevel = 0,
++            .baseArrayLayer = 0,
++            .layerCount = image.info.resources.layers,
++        },
++        .imageOffset = {0, 0, 0},
++        .imageExtent = {image.info.size.width, image.info.size.height, image.info.size.depth},
++    };
++}
++
+ static constexpr u32 MAX_IMAGES = std::numeric_limits<u16>::max();
+ static constexpr u32 MAX_IMAGE_VIEWS = std::numeric_limits<u16>::max();
+ 
+@@ -70,9 +109,107 @@ TextureCache::~TextureCache() = default;
+ 
+ void TextureCache::ProcessDownloadImages() {
+     std::unique_lock lk{download_images_mutex};
++#if defined(XHD_ONLY_RUNTIME)
++    if (XhdExposureReadbacks()) {
++        struct Pending {
++            ImageId image_id;
++            VAddr address;
++            u32 size;
++            u64 offset;
++        };
++        std::vector<Pending> pending;
++        u64 total_size = 0;
++        for (const ImageId image_id : download_images) {
++            const auto& image = slot_images[image_id];
++            if (False(image.flags & ImageFlagBits::GpuModified) || !XhdReadbackAllowed(image)) {
++                continue;
++            }
++            const u32 size = image.info.pitch * image.info.size.height * image.info.size.depth *
++                             image.info.resources.layers * (image.info.num_bits / 8);
++            ASSERT(size <= image.info.guest_size);
++            total_size = (total_size + 15) & ~u64{15};
++            pending.push_back({image_id, image.info.guest_address, size, total_size});
++            total_size += size;
++        }
++        if (!pending.empty()) {
++            const auto start = std::chrono::steady_clock::now();
++            // One allocation prevents reuse of a staging slice before the combined wait.
++            const auto download = runtime.GetStagingPool().Request(total_size, MemoryType::HostCached, 16);
++            for (const auto& item : pending) {
++                auto& image = slot_images[item.image_id];
++                const auto copy = ImageDownloadCopy(image, download.offset + item.offset);
++                runtime.DownloadImage(&image, download.buffer, std::span{&copy, 1});
++            }
++            // Preserve the original synchronous visibility at OnSubmit/OnFence: all copies
++            // complete and reach guest backing memory before returning, with one GPU wait.
++            scheduler.Finish();
++            download.Invalidate();
++            for (const auto& item : pending) {
++                Core::Memory::Instance()->TryWriteBacking(std::bit_cast<u8*>(item.address),
++                                                          download.mapped + item.offset, item.size);
++            }
++            static const bool trace = [] {
++                const char* flag = std::getenv("XHD_COLOR_DIAGNOSTICS");
++                return flag && std::strcmp(flag, "1") == 0;
++            }();
++            if (trace) {
++                static thread_local u64 batches = 0;
++                static thread_local u64 images = 0;
++                static thread_local u64 bytes = 0;
++                static thread_local double milliseconds = 0;
++                ++batches;
++                images += pending.size();
++                bytes += total_size;
++                milliseconds += std::chrono::duration<double, std::milli>(
++                                    std::chrono::steady_clock::now() - start).count();
++                if (batches == 1 || batches % 120 == 0) {
++                    LOG_INFO(Render_Vulkan,
++                             "XHD_COLOR ReadbackBatch batches={} images={} bytes={} waits={} mean_ms={}",
++                             batches, images, bytes, batches, milliseconds / batches);
++                }
++            }
++        }
++        download_images.clear();
++        return;
++    }
++#endif
++    // Measure the reference path too, so the same binary can compare wait cost.
++#if defined(XHD_ONLY_RUNTIME)
++    const auto reference_start = std::chrono::steady_clock::now();
++    u64 reference_images = 0;
++    u64 reference_bytes = 0;
++    for (const ImageId image_id : download_images) {
++        const auto& image = slot_images[image_id];
++        if (True(image.flags & ImageFlagBits::GpuModified)) {
++            ++reference_images;
++            reference_bytes += image.info.pitch * image.info.size.height * image.info.size.depth *
++                               image.info.resources.layers * (image.info.num_bits / 8);
++        }
++    }
++#endif
+     for (const ImageId image_id : download_images) {
+         DownloadImageMemory(image_id, true);
+     }
++#if defined(XHD_ONLY_RUNTIME)
++    static const bool reference_trace = [] {
++        const char* flag = std::getenv("XHD_COLOR_DIAGNOSTICS");
++        return flag && std::strcmp(flag, "1") == 0;
++    }();
++    if (reference_trace && reference_images) {
++        static thread_local u64 batches = 0, images = 0, bytes = 0;
++        static thread_local double milliseconds = 0;
++        ++batches;
++        images += reference_images;
++        bytes += reference_bytes;
++        milliseconds += std::chrono::duration<double, std::milli>(
++                            std::chrono::steady_clock::now() - reference_start).count();
++        if (batches == 1 || batches % 120 == 0) {
++            LOG_INFO(Render_Vulkan,
++                     "XHD_COLOR ReadbackSync batches={} images={} bytes={} waits={} mean_ms={}",
++                     batches, images, bytes, images, milliseconds / batches);
++        }
++    }
++#endif
+     download_images.clear();
+ }
+ 
+@@ -86,27 +223,28 @@ void TextureCache::DownloadImageMemory(ImageId image_id, bool sync) {
+     ASSERT(download_size <= image.info.guest_size);
+     const auto download =
+         runtime.GetStagingPool().Request(download_size, MemoryType::HostCached, 16, !sync);
+-    const vk::BufferImageCopy image_download = {
+-        .bufferOffset = download.offset,
+-        .bufferRowLength = image.info.pitch,
+-        .bufferImageHeight = image.info.size.height,
+-        .imageSubresource =
+-            {
+-                .aspectMask = image.info.props.is_depth ? vk::ImageAspectFlagBits::eDepth
+-                                                        : vk::ImageAspectFlagBits::eColor,
+-                .mipLevel = 0,
+-                .baseArrayLayer = 0,
+-                .layerCount = image.info.resources.layers,
+-            },
+-        .imageOffset = {0, 0, 0},
+-        .imageExtent = {image.info.size.width, image.info.size.height, image.info.size.depth},
+-    };
++    const auto image_download = ImageDownloadCopy(image, download.offset);
+     runtime.DownloadImage(&image, download.buffer, std::span{&image_download, 1});
+     if (sync) {
+         scheduler.Finish();
+         download.Invalidate();
+         Core::Memory::Instance()->TryWriteBacking(std::bit_cast<u8*>(image.info.guest_address),
+                                                   download.mapped, download_size);
++#if defined(XHD_ONLY_RUNTIME)
++        static const bool xhd_color_trace = [] {
++            const char* flag = std::getenv("XHD_COLOR_DIAGNOSTICS");
++            return flag && std::strcmp(flag, "1") == 0;
++        }();
++        if (xhd_color_trace && image.info.size.width <= 8) {
++            static thread_local std::set<VAddr> seen;
++            if (seen.size() < 64 && seen.insert(image.info.guest_address).second) {
++                LOG_INFO(Render_Vulkan,
++                         "XHD_COLOR SmallImageReadback address={:#x} width={} height={} bytes={} format={}",
++                         image.info.guest_address, image.info.size.width,
++                         image.info.size.height, download_size, vk::to_string(image.info.pixel_format));
++            }
++        }
++#endif
+     } else {
+         scheduler.DeferPriorityOperation(
+             [this, device_addr = image.info.guest_address, download, download_size] {
