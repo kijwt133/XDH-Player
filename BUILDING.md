@@ -1,12 +1,12 @@
 # 对应源码与构建
 
-Windows 二进制的对应源代码在同一 Release 的 `XDH-Player-source-v0.1.0.zip`。其中 `reference/shadPS4` 是当前核心所用的完整上游/依赖源树，并已包含本地修改；不需要游戏或 Sony 系统模块即可编译。`patches/` 供审核本地核心改动。上游子模块的 FDK-AAC、libusb 与 WMI 兼容改动同时保存在源树中，并由 `tools/build_core.py` 检查。
+Windows 二进制的对应源代码在同一 Release 的 `XHD-Player-source-v0.1.1.zip`。其中 `reference/shadPS4` 是当前核心所用的完整上游/依赖源树，并已包含本地修改；不需要游戏或 Sony 系统模块即可编译。`patches/` 供审核本地核心改动。上游子模块的 FDK-AAC、libusb 与 WMI 兼容改动同时保存在源树中，并由 `tools/build_core.py` 检查。
 
 核心基线：shadPS4 提交 `c7e065d1b415be16c23e260a21f1dd8bbfc4cb57`。工具链：Zig 0.15.2，Windows x86-64 目标；构建脚本采用 CMake、Ninja、Python。依赖版本以源码包内完整源树为准，避免在构建时切换到上游最新版本。
 
 ## 目录与工具准备
 
-解压源包为 `XDH-Player-source/`，使用 Git、Python 3.11 或更新版本，安装 CMake/Ninja Python 包到该目录的 `toolchain/python-packages`：
+解压源包为 `XHD-Player-source/`，使用 Git、Python 3.11 或更新版本，安装 CMake/Ninja Python 包到该目录的 `toolchain/python-packages`：
 
 ```powershell
 python -m pip install --target ./toolchain/python-packages cmake ninja
@@ -16,7 +16,7 @@ python -m pip install --target ./toolchain/python-packages cmake ninja
 
 ```text
 work/
-  XDH-Player-source/
+  XHD-Player-source/
     config.json
     tools/build_core.py
     tools/runtime.py
@@ -26,7 +26,7 @@ work/
   native/toolchain/zig-x86_64-windows-0.15.2/zig.exe
 ```
 
-在 `XDH-Player-source` 运行：
+在 `XHD-Player-source` 运行：
 
 ```powershell
 python tools/build_core.py --build --jobs 4
