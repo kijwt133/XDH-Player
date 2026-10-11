@@ -1,20 +1,20 @@
-# XDH-Player
+# XHD-Player
 
 为《初音未来 -Project DIVA- X HD》CUSA02908 01.00 制作的 Windows 专用运行环境，采用修改后的 shadPS4 核心运行原版 PS4 游戏程序。目标是减少玩家配置步骤，并修复此游戏遇到的启动、光照回读和性能问题。
 
-仓库名为 **XDH-Player**，运行包目录仍为 **XHD-Player**。这是非官方的游戏专用兼容运行时，尚不是完整的原生 PC 重写版。
+仓库与运行包目录均为 **XHD-Player**。这是非官方的游戏专用兼容运行时，尚不是完整的原生 PC 重写版。
 
 ## 下载与开始游戏
 
-从 [Releases](https://github.com/kijwt133/XDH-Player/releases) 下载：
+从 [Releases](https://github.com/kijwt133/XHD-Player/releases) 下载：
 
 | 文件 | 内容 |
 |---|---|
-| `XDH-Player-template-v0.1.0.zip` | 纯净启动环境模板，不含核心 EXE；需要自行构建或提供匹配核心 |
-| `XDH-Player-source-v0.1.0.zip` | 对应核心的完整源代码、依赖源树、补丁、构建脚本 |
+| `XHD-Player-template-v0.1.1.zip` | 纯净启动环境模板，不含核心 EXE；需要自行构建或提供匹配核心 |
+| `XHD-Player-source-v0.1.1.zip` | 对应核心的完整源代码、依赖源树、补丁、构建脚本 |
 | `SHA256SUMS.txt` | 下载文件校验值 |
 
-**公开下载包不包含核心 EXE、游戏、Sony 系统模块、密钥、个人存档或已生成的缓存。** 带核心的 `XDH-Player-windows-v0.1.0.zip` 仅保留在维护者本地，不作为 GitHub 附件发布。本机测试使用过自备系统模块；公开版需要使用者自行构建或提供匹配核心，并准备必要模块，不能仅凭解压模板开始游戏。
+**公开下载包不包含核心 EXE、游戏、Sony 系统模块、密钥、个人存档或已生成的缓存。** 带核心的 `XHD-Player-windows-v0.1.0.zip` 仅保留在维护者本地，不作为 GitHub 附件发布。本机测试使用过自备系统模块；公开版需要使用者自行构建或提供匹配核心，并准备必要模块，不能仅凭解压模板开始游戏。
 
 1. 解压纯净模板到自己可写的目录，按照 [BUILDING.md](BUILDING.md) 构建核心，将输出 EXE 放到 `core/XHD-Runtime.exe`。模板默认校验本地测试核心的哈希，自行编译后需将 `package.json` 的 `core_sha256` 及 `required_files` 中核心项的 `sha256` 更新为自己构建的可信 EXE 哈希。
 2. 将自己的完整游戏文件夹放入 `game/CUSA02908/`，确认下方结构。不要套两层 CUSA02908 文件夹。
