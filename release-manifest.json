@@ -5,17 +5,20 @@
     {
       "name": "XDH-Player-windows-v0.1.0.zip",
       "bytes": 38539730,
-      "sha256": "4ba9853d219f34a3d4ac10e311bf9704f0953539fc3d77dd95ded9770863b451"
+      "sha256": "4ba9853d219f34a3d4ac10e311bf9704f0953539fc3d77dd95ded9770863b451",
+      "distribution": "local-only"
     },
     {
       "name": "XDH-Player-template-v0.1.0.zip",
-      "bytes": 183035,
-      "sha256": "9a02c73c76c8e590a6824fefe923422bac4ef7a89258fd450461fe57c390b3b4"
+      "bytes": 182531,
+      "sha256": "0a850eee1a030c67f5274df8592b3f08d94c4a3b0aee4aca2336773887951ecc",
+      "distribution": "github-release"
     },
     {
       "name": "XDH-Player-source-v0.1.0.zip",
       "bytes": 148630710,
-      "sha256": "9e112b31d9df12f4a1a218c6e8376acdc4fb416bc2732c05eabe690713de03e7"
+      "sha256": "9e112b31d9df12f4a1a218c6e8376acdc4fb416bc2732c05eabe690713de03e7",
+      "distribution": "github-release"
     }
   ],
   "game_included": false,
@@ -23,5 +26,6 @@
   "saves_included": false,
   "source_files": 24950,
   "source_commit": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
-  "bbport_inspiration_commit": "8a2ed0ec9170b924e83708da0432e59ae70eeadf"
+  "bbport_inspiration_commit": "8a2ed0ec9170b924e83708da0432e59ae70eeadf",
+  "public_core_binary_included": false
 }
