@@ -1,4 +1,4 @@
-param([switch]$Check, [int]$TestSeconds = 0)
+﻿param([switch]$Check, [int]$TestSeconds = 0)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $playerRoot = Split-Path -Parent $PSScriptRoot
