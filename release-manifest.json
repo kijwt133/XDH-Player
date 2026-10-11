@@ -24,9 +24,12 @@
   "game_included": false,
   "sony_modules_included": false,
   "saves_included": false,
-  "source_files": 24950,
+  "source_files": 24949,
   "source_commit": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
   "bbport_inspiration_commit": "8a2ed0ec9170b924e83708da0432e59ae70eeadf",
   "public_core_binary_included": false,
-  "change": "Project name corrected to XHD-Player; core executable unchanged."
+  "change": "Project name corrected to XHD-Player; core executable unchanged.",
+  "excluded_upstream_binaries": [
+    "externals/vma/bin/VmaSample_Release_vs2022.exe"
+  ]
 }
