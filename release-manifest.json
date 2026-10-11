@@ -1,0 +1,27 @@
+{
+  "version": "v0.1.0",
+  "core_sha256": "e9a86ba6b22079d8cf002591538ef7c83fcfca706b5f300f4eda3f4b4ee95c19",
+  "archives": [
+    {
+      "name": "XDH-Player-windows-v0.1.0.zip",
+      "bytes": 38539730,
+      "sha256": "4ba9853d219f34a3d4ac10e311bf9704f0953539fc3d77dd95ded9770863b451"
+    },
+    {
+      "name": "XDH-Player-template-v0.1.0.zip",
+      "bytes": 183035,
+      "sha256": "9a02c73c76c8e590a6824fefe923422bac4ef7a89258fd450461fe57c390b3b4"
+    },
+    {
+      "name": "XDH-Player-source-v0.1.0.zip",
+      "bytes": 148630710,
+      "sha256": "9e112b31d9df12f4a1a218c6e8376acdc4fb416bc2732c05eabe690713de03e7"
+    }
+  ],
+  "game_included": false,
+  "sony_modules_included": false,
+  "saves_included": false,
+  "source_files": 24950,
+  "source_commit": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
+  "bbport_inspiration_commit": "8a2ed0ec9170b924e83708da0432e59ae70eeadf"
+}
