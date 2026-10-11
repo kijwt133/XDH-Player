@@ -10,14 +10,13 @@
 
 | 文件 | 内容 |
 |---|---|
-| `XDH-Player-windows-v0.1.0.zip` | 最新可运行核心、纯净配置、启动器、必要许可证；推荐玩家使用 |
-| `XDH-Player-template-v0.1.0.zip` | 纯净启动环境模板，不含核心 EXE；需从对应 Windows 包取得核心 |
+| `XDH-Player-template-v0.1.0.zip` | 纯净启动环境模板，不含核心 EXE；需要自行构建或提供匹配核心 |
 | `XDH-Player-source-v0.1.0.zip` | 对应核心的完整源代码、依赖源树、补丁、构建脚本 |
 | `SHA256SUMS.txt` | 下载文件校验值 |
 
-**公开下载包不包含游戏、Sony 系统模块、密钥、个人存档或已生成的缓存。** 本机测试使用过自备系统模块；公开版需要使用者自行准备它们，不能仅凭本仓库完成游戏资源准备。
+**公开下载包不包含核心 EXE、游戏、Sony 系统模块、密钥、个人存档或已生成的缓存。** 带核心的 `XDH-Player-windows-v0.1.0.zip` 仅保留在维护者本地，不作为 GitHub 附件发布。本机测试使用过自备系统模块；公开版需要使用者自行构建或提供匹配核心，并准备必要模块，不能仅凭解压模板开始游戏。
 
-1. 解压 Windows 包到自己可写的目录。
+1. 解压纯净模板到自己可写的目录，按照 [BUILDING.md](BUILDING.md) 构建核心，将输出 EXE 放到 `core/XHD-Runtime.exe`。模板默认校验本地测试核心的哈希，自行编译后需将 `package.json` 的 `core_sha256` 及 `required_files` 中核心项的 `sha256` 更新为自己构建的可信 EXE 哈希。
 2. 将自己的完整游戏文件夹放入 `game/CUSA02908/`，确认下方结构。不要套两层 CUSA02908 文件夹。
 3. 按 [REQUIRED-MODULES.md](REQUIRED-MODULES.md) 提供兼容系统模块，放入 `runtime/user/sys_modules/`。
 4. 可先双击 `Check-Runtime.cmd` 校验文件；再双击 `Start-XHD.cmd` 启动。
