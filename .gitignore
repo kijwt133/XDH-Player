@@ -1,0 +1,11 @@
+*.sprx
+*.pkg
+eboot.bin
+game/CUSA02908/
+runtime/user/home/
+runtime/user/log/
+runtime/user/cache/
+runtime/user/sys_modules/*.sprx
+logs/
+build/
+*.bak
