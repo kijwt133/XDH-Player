@@ -1,23 +1,23 @@
 {
-  "version": "v0.1.0",
+  "version": "v0.1.1",
   "core_sha256": "e9a86ba6b22079d8cf002591538ef7c83fcfca706b5f300f4eda3f4b4ee95c19",
   "archives": [
     {
-      "name": "XDH-Player-windows-v0.1.0.zip",
+      "name": "XHD-Player-windows-v0.1.0.zip",
       "bytes": 38539730,
-      "sha256": "4ba9853d219f34a3d4ac10e311bf9704f0953539fc3d77dd95ded9770863b451",
+      "sha256": "8662c713b0a78d98f6d470419901df31f95372cb343943abaf508eaa5f728cb4",
       "distribution": "local-only"
     },
     {
-      "name": "XDH-Player-template-v0.1.0.zip",
-      "bytes": 182531,
-      "sha256": "0a850eee1a030c67f5274df8592b3f08d94c4a3b0aee4aca2336773887951ecc",
+      "name": "XHD-Player-template-v0.1.1.zip",
+      "bytes": 182527,
+      "sha256": "4d8fcf3ae94289516559d3e8768065098391537aa25aedaeaf6d74ad76879aaa",
       "distribution": "github-release"
     },
     {
-      "name": "XDH-Player-source-v0.1.0.zip",
-      "bytes": 148630710,
-      "sha256": "9e112b31d9df12f4a1a218c6e8376acdc4fb416bc2732c05eabe690713de03e7",
+      "name": "XHD-Player-source-v0.1.1.zip",
+      "bytes": 148412071,
+      "sha256": "46f69c4aecab84a44c7a7494883a6e345a4b65081c213719afa3d8b6f1b7e275",
       "distribution": "github-release"
     }
   ],
@@ -27,5 +27,6 @@
   "source_files": 24950,
   "source_commit": "c7e065d1b415be16c23e260a21f1dd8bbfc4cb57",
   "bbport_inspiration_commit": "8a2ed0ec9170b924e83708da0432e59ae70eeadf",
-  "public_core_binary_included": false
+  "public_core_binary_included": false,
+  "change": "Project name corrected to XHD-Player; core executable unchanged."
 }
